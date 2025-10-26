@@ -3,11 +3,11 @@ using System.Data;
 
 namespace HockeyStatsAI.Services;
 
-public class DatabaseTools(string connectionString)
+public class DatabaseTools(string connectionString) : IDatabaseTools
 {
     private readonly string _connectionString = connectionString;
 
-    public List<string> ListAllTables()
+    public IEnumerable<string> ListAllTables()
     {
         var tables = new List<string>();
         using var connection = new SqlConnection(_connectionString);
@@ -29,7 +29,7 @@ public class DatabaseTools(string connectionString)
         public bool IsPrimaryKey { get; set; }
     }
 
-    public List<TableSchema> GetTableSchema(string tableName)
+    public IEnumerable<dynamic> GetTableSchema(string tableName)
     {
         var schema = new List<TableSchema>();
         using var connection = new SqlConnection(_connectionString);
@@ -74,7 +74,7 @@ public class DatabaseTools(string connectionString)
         public string? PkColumn { get; set; }
     }
 
-    public List<ForeignKey> GetForeignKeys(string tableName)
+    public IEnumerable<dynamic> GetForeignKeys(string tableName)
     {
         var foreignKeys = new List<ForeignKey>();
         using var connection = new SqlConnection(_connectionString);

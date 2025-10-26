@@ -3,15 +3,19 @@ using Microsoft.Extensions.Configuration;
 
 var configuration = new ConfigurationBuilder()
     .SetBasePath(Directory.GetCurrentDirectory())
-    .AddJsonFile("appsettings.json", optional: true, reloadOnChange: true)
+    .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
     .AddUserSecrets<Program>()
     .Build();
 
-string apiKey = configuration["GEMINI-API-KEY"] ?? throw new InvalidOperationException("API key not found. Please make sure you have set the GEMINI-API-KEY user secret.");
+string apiKey = configuration["GEMINI_API_KEY"] ?? throw new InvalidOperationException("API key not found. Please make sure you have set the GEMINI_API_KEY user secret.");
 string connectionString = configuration["ConnectionStrings:HockeyStatsDb"] ?? throw new InvalidOperationException("Connection string 'HockeyStatsDb' not found in user secrets. Please make sure you have set it.");
 
+Console.WriteLine("Using connection string: " + connectionString);
+Console.WriteLine("Using API Key: " + new string('*', apiKey.Length));
+
 var sqlExecutor = new SqlExecutor(connectionString);
-var geminiTranslator = new GeminiTranslator(apiKey, connectionString);
+var databaseTools = new DatabaseTools(connectionString);
+var geminiTranslator = new GeminiTranslator(apiKey, databaseTools);
 
 Console.WriteLine("Welcome to the HockeyStats Natural Language Query Tool!");
 

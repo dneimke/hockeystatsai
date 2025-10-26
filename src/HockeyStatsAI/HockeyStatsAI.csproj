@@ -6,7 +6,9 @@
     <RootNamespace>HockeyStatsAI</RootNamespace>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <UserSecretsId>ffb57e3f-d070-4c49-9bd0-1260bf1fbe46</UserSecretsId>
+    
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <UserSecretsId>483c4b56-8150-4e01-8c92-04ca08cd2129</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>

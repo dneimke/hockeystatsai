@@ -8,9 +8,16 @@ Follow these steps to get the application up and running on your local machine.
 
 ### Prerequisites
 
-* .NET SDK (version 8.0 or later)
+* .NET SDK (version 9.0 or later)
 * SQL Server LocalDB instance named `MSSQLLocalDB` with a database named `hockeystats`.
 * A Gemini API Key from Google AI Studio.
+
+### Project Structure
+
+The project is organized into the following directories:
+
+- `src/HockeyStatsAI`: The main console application.
+- `src/HockeyStatsAI.Tests`: The unit tests for the application.
 
 ### Setup
 
@@ -24,35 +31,44 @@ Follow these steps to get the application up and running on your local machine.
 2. **Install NuGet packages:**
 
     ```bash
-    dotnet restore
+    dotnet restore src/HockeyStatsAI.sln
     ```
 
 3. **Configure your Gemini API Key:**
     The application uses `dotnet user-secrets` to securely store your Gemini API Key during development. Replace `YOUR_GEMINI_API_KEY` with your actual key.
 
     ```bash
-    dotnet user-secrets init
-    dotnet user-secrets set "GEMINI-API-KEY" "YOUR_GEMINI_API_KEY"
+    dotnet user-secrets init --project src/HockeyStatsAI
+    dotnet user-secrets set "GEMINI-API-KEY" "YOUR_GEMINI_API_KEY" --project src/HockeyStatsAI
     ```
 
 4. **Configure the Database Connection String:**
     The database connection string is stored in `dotnet user-secrets`. Replace `YOUR_CONNECTION_STRING` with your actual SQL Server connection string.
 
     ```bash
-    dotnet user-secrets set "ConnectionStrings:HockeyStatsDb" "YOUR_CONNECTION_STRING"
+    dotnet user-secrets set "ConnectionStrings:HockeyStatsDb" "YOUR_CONNECTION_STRING" --project src/HockeyStatsAI
     ```
 
 ### Running the Application
 
-To run the application, execute the following command in the project root:
+To run the application, execute the following command from the root directory:
 
 ```bash
-dotnet run
+dotnet run --project src/HockeyStatsAI
 ```
 
 The application will then:
 
-1. Send a predefined natural language question to the Gemini API.
-2. Receive and parse the generated SQL query.
-3. Execute the SQL query against your local database.
-4. Display the results to the console.
+1. Prompt you for a natural language question.
+2. Send the question to the Gemini API.
+3. Receive and parse the generated SQL query.
+4. Execute the SQL query against your local database.
+5. Display the results to the console.
+
+### Running the Tests
+
+To run the unit tests, execute the following command from the root directory:
+
+```bash
+dotnet test src/HockeyStatsAI.sln
+```

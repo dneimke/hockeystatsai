@@ -3,9 +3,10 @@ using System.Text.Json.Nodes;
 
 namespace HockeyStatsAI.Services;
 
-public class GeminiTranslator(string apiKey, string connectionString)
+public class GeminiTranslator(string apiKey, IDatabaseTools databaseTools, HttpClient? httpClient = null)
 {
-    private readonly DatabaseTools _databaseTools = new(connectionString);
+    private readonly IDatabaseTools _databaseTools = databaseTools;
+    private readonly HttpClient _httpClient = httpClient ?? new HttpClient();
 
     public async Task<string?> TranslateToSql(string question)
     {
@@ -65,7 +66,7 @@ public class GeminiTranslator(string apiKey, string connectionString)
             }
         };
 
-        using var client = new HttpClient();
+        var client = _httpClient;
         var request = new HttpRequestMessage(HttpMethod.Post, $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}");
 
         var requestContent = new JsonObject
@@ -102,35 +103,38 @@ public class GeminiTranslator(string apiKey, string connectionString)
             var functionName = functionCall?["name"]?.GetValue<string>();
             var functionArgs = functionCall?["args"];
 
-            Console.WriteLine($"Function Call: {functionName}");
+
 
             JsonNode toolOutput;
 
+            Console.WriteLine($"Calling function: {functionName}");
             switch (functionName)
             {
                 case "ListAllTables":
-                {
-                    var tables = _databaseTools.ListAllTables();
-                    toolOutput = new JsonObject { ["tables"] = JsonSerializer.SerializeToNode(tables) };
-                    break;
-                }
+                    {
+                        var tables = _databaseTools.ListAllTables();
+                        toolOutput = new JsonObject { ["tables"] = JsonSerializer.SerializeToNode(tables) };
+                        break;
+                    }
                 case "GetTableSchema":
-                {
-                    var tableName = functionArgs?["tableName"]?.GetValue<string>();
-                    var tableSchema = _databaseTools.GetTableSchema(tableName!);
-                    toolOutput = new JsonObject { ["schema"] = JsonSerializer.SerializeToNode(tableSchema) };
-                    break;
-                }
+                    {
+                        var tableName = functionArgs?["tableName"]?.GetValue<string>();
+                        var tableSchema = _databaseTools.GetTableSchema(tableName!);
+                        toolOutput = new JsonObject { ["schema"] = JsonSerializer.SerializeToNode(tableSchema) };
+                        break;
+                    }
                 case "GetForeignKeys":
-                {
-                    var tableName = functionArgs?["tableName"]?.GetValue<string>();
-                    var foreignKeys = _databaseTools.GetForeignKeys(tableName!);
-                    toolOutput = new JsonObject { ["foreignKeys"] = JsonSerializer.SerializeToNode(foreignKeys) };
-                    break;
-                }
+                    {
+                        var tableName = functionArgs?["tableName"]?.GetValue<string>();
+                        var foreignKeys = _databaseTools.GetForeignKeys(tableName!);
+                        toolOutput = new JsonObject { ["foreignKeys"] = JsonSerializer.SerializeToNode(foreignKeys) };
+                        break;
+                    }
                 default:
                     throw new InvalidOperationException($"Unknown function call: {functionName}");
             }
+
+            Console.WriteLine($"Function output: {toolOutput.ToJsonString()}");
 
             var toolOutputContent = new JsonObject
             {
