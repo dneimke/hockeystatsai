@@ -1,0 +1,18 @@
+# Visual Studio Code
+.vscode/
+
+# Build artifacts
+bin/
+obj/
+
+# NuGet packages
+*.nupkg
+.nuget/
+
+# Rider
+.idea/
+
+# misc
+*.user
+*.suo
+*.log

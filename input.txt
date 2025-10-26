@@ -1,0 +1,13 @@
+ test-gemini  dotnet run
+Welcome to the HockeyStats Natural Language Query Tool!
+Here are some example questions you can ask:
+- What tables are in the database?
+- How many teams played in M1M in the 2023 season?
+- List all clubs.
+- What are the names of the competitions?
+
+Enter your question (or type 'exit' to quit): list all clubs
+SQL Query:
+Could not translate question to SQL.
+
+Enter your question (or type 'exit' to quit):
