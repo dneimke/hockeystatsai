@@ -1,0 +1,55 @@
+What is the Name of the club with the short name ANN
+SQL Query: SELECT Name FROM Club WHERE ShortName = 'ANN'
+A: Name: Annersley Old Scholars Hockey Club
+
+
+How many games did SHC play in the M1M competition in 2024
+SQL Query: SQL Query: SELECT
+  COUNT(CF.Id)
+FROM CompetitionFixture AS CF
+JOIN CompetitionTeam AS CT_HOME
+  ON CF.HomeTeamId = CT_HOME.Id
+JOIN Club AS C_HOME
+  ON CT_HOME.ClubId = C_HOME.Id
+JOIN CompetitionTeam AS CT_AWAY
+  ON CF.AwayTeamId = CT_AWAY.Id
+JOIN Club AS C_AWAY
+  ON CT_AWAY.ClubId = C_AWAY.Id
+JOIN CompetitionSeason AS CS
+  ON CF.CompetitionSeasonId = CS.Id
+JOIN Competition AS Comp
+  ON CS.CompetitionId = Comp.Id
+WHERE
+  (
+    C_HOME.ShortName = 'SHC' OR C_AWAY.ShortName = 'SHC'
+  ) AND (
+    Comp.ShortName = 'M1M' OR Comp.Name = 'M1M'
+  ) AND CS.Year = 2024;
+A: 21
+
+
+How many teams played in the M1M in the 2023 season?
+SQL Query: SELECT COUNT(DISTINCT T3.ClubId) FROM Competition AS T1 INNER JOIN CompetitionSeason AS T2 ON T1.Id = T2.CompetitionId INNER JOIN CompetitionTeam AS T3 ON T2.Id = T3.CompetitionSeasonId WHERE T1.ShortName = 'M1M' AND T2.Year = 2023
+: 8
+
+
+List Name and Short Name of all Clubs list them in Short Name ascending order
+SQL Query: SELECT Name, ShortName FROM Club ORDER BY ShortName ASC;
+
+
+What are the names of the competitions?
+SQL Query: SELECT Name FROM Competition
+Name: Premier League Men
+Name: Premier League Women
+Name: Metro 1 Men
+Name: Metro 1 Women
+Name:  Metro 2 Men
+Name:  Metro 2 Women
+Name:  Metro 3 Men
+Name:  Metro 3 Women
+Name:  Metro 4 Men
+Name:  Metro 4 Women
+Name:  Metro 5 Men
+Name:  Metro 5 Women
+Name:  Metro 6 Men
+Name: Metro 6 Women
