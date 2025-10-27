@@ -12,7 +12,7 @@ public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTool
     private readonly HttpClient _httpClient = httpClient ?? new();
     private readonly string _apiKey = apiKey;
 
-    private static readonly JsonSerializerOptions s_jsonOptions = new() 
+    private static readonly JsonSerializerOptions s_jsonOptions = new()
     {
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
@@ -62,7 +62,7 @@ public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTool
                 .ToList();
 
             if (functionCalls == null || functionCalls.Count == 0)
-            { 
+            {
                 break; // No more function calls, exit loop
             }
 
@@ -83,7 +83,7 @@ public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTool
 
     private async Task<GeminiResponse?> SendRequestAsync(List<Content> contents, List<Tool> tools)
     {
-        var requestUri = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={_apiKey}";
+        var requestUri = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
         var request = new GeminiRequest
         {
             Contents = contents,
@@ -147,44 +147,44 @@ public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTool
 
         // The model can call multiple tools in parallel, so we use Task.WhenAll although our execution is sequential for now.
         // This is a placeholder for potential future parallel execution of tools.
-        await Task.WhenAll(); 
+        await Task.WhenAll();
 
         return toolResponses;
     }
 
     private static List<Tool> GetTools() =>
     [
-        new() 
+        new()
         {
-            FunctionDeclarations = 
+            FunctionDeclarations =
             [
-                new() 
+                new()
                 {
                     Name = "ListAllTables",
                     Description = "Lists all tables in the database.",
                     Parameters = new FunctionParameters { Properties = new() }
                 },
-                new() 
+                new()
                 {
                     Name = "GetTableSchema",
                     Description = "Gets the schema for a given table.",
-                    Parameters = new FunctionParameters 
+                    Parameters = new FunctionParameters
                     {
                         Required = ["tableName"],
-                        Properties = new() 
+                        Properties = new()
                         {
                             ["tableName"] = new ParameterProperty { Type = "string", Description = "The name of the table." }
                         }
                     }
                 },
-                new() 
+                new()
                 {
                     Name = "GetForeignKeys",
                     Description = "Gets the foreign keys for a given table.",
-                    Parameters = new FunctionParameters 
+                    Parameters = new FunctionParameters
                     {
                         Required = ["tableName"],
-                        Properties = new() 
+                        Properties = new()
                         {
                             ["tableName"] = new ParameterProperty { Type = "string", Description = "The name of the table." }
                         }
@@ -206,7 +206,7 @@ public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTool
         // Try to find SQL wrapped in ```sql
         var sqlBlockMatch = BlockSqlRegex().Match(fullText);
         if (sqlBlockMatch.Success)
-        { 
+        {
             return sqlBlockMatch.Groups[1].Value.Trim();
         }
 
