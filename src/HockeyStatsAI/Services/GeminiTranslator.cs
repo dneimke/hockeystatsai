@@ -1,102 +1,99 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
+using HockeyStatsAI.Models;
 
 namespace HockeyStatsAI.Services;
 
 public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTools, HttpClient? httpClient = null)
 {
     private readonly IDatabaseTools _databaseTools = databaseTools;
-    private readonly HttpClient _httpClient = httpClient ?? new HttpClient();
+    private readonly HttpClient _httpClient = httpClient ?? new();
+    private readonly string _apiKey = apiKey;
+
+    private static readonly JsonSerializerOptions s_jsonOptions = new() 
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    private const string Prompt = """
+        You are a SQL expert. Your task is to translate a natural language question into a SQL query.
+
+        **Your first step is to always call the `ListAllTables()` tool to see the available tables.**
+
+        After listing all tables, for each table that seems relevant to the user's question, you *must* call `GetTableSchema(tableName)` to understand its columns and `GetForeignKeys(tableName)` to understand its relationships with other tables. This comprehensive schema exploration is crucial before attempting to generate any SQL query.
+
+        Use these tools to explore the schema and then generate the SQL query.
+
+        When interpreting competition names, please consider both the 'Name' and 'ShortName' columns in the 'Competition' table. If a short, ambiguous term is used (e.g., 'M1M'), assume it refers to the 'ShortName'.
+
+        After you have gathered all necessary information using the tools, your final response *must contain only the SQL query and nothing else*. Do not include any conversational text, explanations, or tool outputs. If you cannot generate a SQL query, respond with 'I cannot generate a SQL query for this question.'
+
+        Example of a complete SQL query: SELECT Id, Name FROM Competition WHERE Name = 'M1M';
+
+        Example of joining tables: To find clubs in a specific competition, you might join the 'Club' and 'CompetitionTeam' tables.
+        Example of filtering: To find games for 'SHC', you would filter on the 'Name' or 'ShortName' column in the 'Club' table.
+
+        Translate the following natural language question into a SQL query:
+
+        Question: {question}
+
+        SQL Query:
+        """;
 
     public async Task<string?> TranslateToSql(string question)
     {
-        var prompt =
-            $"You are a SQL expert. Your task is to translate a natural language question into a SQL query.\n\n**Your first step is to always call the `ListAllTables()` tool to see the available tables.**\n\nAfter listing all tables, for each table that seems relevant to the user's question, you *must* call `GetTableSchema(tableName)` to understand its columns and `GetForeignKeys(tableName)` to understand its relationships with other tables. This comprehensive schema exploration is crucial before attempting to generate any SQL query.\n\nUse these tools to explore the schema and then generate the SQL query.\n\nWhen interpreting competition names, please consider both the 'Name' and 'ShortName' columns in the 'Competition' table. If a short, ambiguous term is used (e.g., 'M1M'), assume it refers to the 'ShortName'.\n\nAfter you have gathered all necessary information using the tools, your final response *must contain only the SQL query and nothing else*. Do not include any conversational text, explanations, or tool outputs. If you cannot generate a SQL query, respond with 'I cannot generate a SQL query for this question.'\n\nExample of a complete SQL query: SELECT Id, Name FROM Competition WHERE Name = 'M1M';\n\nExample of joining tables: To find clubs in a specific competition, you might join the 'Club' and 'CompetitionTeam' tables.\nExample of filtering: To find games for 'SHC', you would filter on the 'Name' or 'ShortName' column in the 'Club' table.\n\nTranslate the following natural language question into a SQL query:\n\nQuestion: {question}\n\nSQL Query:";
-
-        var tools = new JsonObject
+        var tools = GetTools();
+        var conversationHistory = new List<Content>
         {
-            ["function_declarations"] = new JsonArray
+            new() { Parts = [new() { Text = Prompt.Replace("{question}", question) }] }
+        };
+
+        GeminiResponse? response;
+        while (true)
+        {
+            response = await SendRequestAsync(conversationHistory, tools);
+
+            var functionCalls = response?.Candidates.FirstOrDefault()?.Content?.Parts
+                .Where(p => p.FunctionCall != null)
+                .Select(p => p.FunctionCall!)
+                .ToList();
+
+            if (functionCalls == null || functionCalls.Count == 0)
+            { 
+                break; // No more function calls, exit loop
+            }
+
+            // Add the model's response (containing the function calls) to the history
+            var modelResponseContent = response?.Candidates.FirstOrDefault()?.Content;
+            if (modelResponseContent != null)
             {
-                new JsonObject
-                {
-                    ["name"] = "ListAllTables",
-                    ["description"] = "Lists all tables in the database.",
-                    ["parameters"] = new JsonObject
-                    {
-                        ["type"] = "object",
-                        ["properties"] = new JsonObject()
-                    }
-                },
-                new JsonObject
-                {
-                    ["name"] = "GetTableSchema",
-                    ["description"] = "Gets the schema for a given table.",
-                    ["parameters"] = new JsonObject
-                    {
-                        ["type"] = "object",
-                        ["properties"] = new JsonObject
-                        {
-                            ["tableName"] = new JsonObject
-                            {
-                                ["type"] = "string",
-                                ["description"] = "The name of the table."
-                            }
-                        },
-                        ["required"] = new JsonArray("tableName")
-                    }
-                },
-                new JsonObject
-                {
-                    ["name"] = "GetForeignKeys",
-                    ["description"] = "Gets the foreign keys for a given table.",
-                    ["parameters"] = new JsonObject
-                    {
-                        ["type"] = "object",
-                        ["properties"] = new JsonObject
-                        {
-                            ["tableName"] = new JsonObject
-                            {
-                                ["type"] = "string",
-                                ["description"] = "The name of the table."
-                            }
-                        },
-                        ["required"] = new JsonArray("tableName")
-                    }
-                }
+                conversationHistory.Add(modelResponseContent);
             }
-        };
 
-        var client = _httpClient;
-        var request = new HttpRequestMessage(HttpMethod.Post, $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}");
-
-        var contents = new List<JsonObject>
-        {
-            new() {
-                ["parts"] = new JsonArray(
-                new JsonObject
-                {
-                    ["text"] = prompt
-                })
-            }
-        };
-
-        var requestContentsArray = new JsonArray();
-
-        foreach (var item in contents)
-        {
-            requestContentsArray.Add(JsonNode.Parse(item.ToJsonString()!)!); // Deep clone each item
+            // Execute all function calls and add their responses to the history
+            var toolResponses = await ExecuteFunctionCallsAsync(functionCalls);
+            conversationHistory.Add(new Content { Role = "tool", Parts = toolResponses });
         }
 
-        var requestContent = new JsonObject
+        return GetSqlFromResponse(response);
+    }
+
+    private async Task<GeminiResponse?> SendRequestAsync(List<Content> contents, List<Tool> tools)
+    {
+        var requestUri = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={_apiKey}";
+        var request = new GeminiRequest
         {
-            ["contents"] = requestContentsArray,
-            ["tools"] = new JsonArray(tools)
+            Contents = contents,
+            Tools = tools
         };
 
-        request.Content = new StringContent(requestContent.ToJsonString(), System.Text.Encoding.UTF8, "application/json");
+        var jsonContent = JsonSerializer.Serialize(request, s_jsonOptions);
+        var httpContent = new StringContent(jsonContent, System.Text.Encoding.UTF8, "application/json");
 
-        var response = await client.SendAsync(request);
+        var response = await _httpClient.PostAsync(requestUri, httpContent);
 
         if (!response.IsSuccessStatusCode)
         {
@@ -105,116 +102,101 @@ public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTool
             return null;
         }
 
-        string responseBody = await response.Content.ReadAsStringAsync();
-        var responseNode = JsonNode.Parse(responseBody);
-        // Console.WriteLine($"LLM Response (Initial): {responseNode.ToJsonString()}");
+        var responseBody = await response.Content.ReadAsStringAsync();
+        return JsonSerializer.Deserialize<GeminiResponse>(responseBody, s_jsonOptions);
+    }
 
-        while (true)
+    private async Task<List<Part>> ExecuteFunctionCallsAsync(List<FunctionCall> functionCalls)
+    {
+        var toolResponses = new List<Part>();
+
+        foreach (var functionCall in functionCalls)
         {
-            var functionCalls = responseNode?["candidates"]?[0]?["content"]?["parts"]?.AsArray()
-                .Where(p => p?["functionCall"] != null)
-                .Select(p => p!["functionCall"]!)
-                .ToList();
+            Console.WriteLine($"Executing tool: {functionCall.Name}");
+            JsonElement toolOutput;
 
-            if (functionCalls == null || functionCalls.Count == 0)
+            switch (functionCall.Name)
             {
-                break; // No more function calls, exit loop
+                case "ListAllTables":
+                    var tables = _databaseTools.ListAllTables();
+                    toolOutput = JsonSerializer.SerializeToElement(new { tables }, s_jsonOptions);
+                    break;
+                case "GetTableSchema":
+                    var tableNameSchema = functionCall.Args.GetProperty("tableName").GetString();
+                    var tableSchema = _databaseTools.GetTableSchema(tableNameSchema!);
+                    toolOutput = JsonSerializer.SerializeToElement(new { schema = tableSchema }, s_jsonOptions);
+                    break;
+                case "GetForeignKeys":
+                    var tableNameKeys = functionCall.Args.GetProperty("tableName").GetString();
+                    var foreignKeys = _databaseTools.GetForeignKeys(tableNameKeys!);
+                    toolOutput = JsonSerializer.SerializeToElement(new { foreignKeys }, s_jsonOptions);
+                    break;
+                default:
+                    throw new InvalidOperationException($"Unknown function call: {functionCall.Name}");
             }
 
-            // Add the model's response (containing function calls) to the history
-            var modelContent = responseNode?["candidates"]?[0]?["content"];
-            if (modelContent != null)
+            toolResponses.Add(new Part
             {
-                var newModelContent = new JsonObject();
-                foreach (var property in modelContent.AsObject())
+                FunctionResponse = new FunctionResponse
                 {
-                    newModelContent[property.Key] = (JsonNode)JsonNode.Parse(property.Value!.ToJsonString()!)!;
+                    Name = functionCall.Name,
+                    Response = toolOutput
                 }
-                contents.Add(newModelContent);
-            }
+            });
+        }
 
-            // Execute tools and add their responses to the history
-            foreach (var functionCall in functionCalls)
-            {
-                var functionName = functionCall?["name"]?.GetValue<string>();
-                var functionArgs = functionCall?["args"];
+        // The model can call multiple tools in parallel, so we use Task.WhenAll although our execution is sequential for now.
+        // This is a placeholder for potential future parallel execution of tools.
+        await Task.WhenAll(); 
 
-                JsonNode toolOutput;
+        return toolResponses;
+    }
 
-                Console.WriteLine($"Calling function: {functionName}");
-                switch (functionName)
+    private static List<Tool> GetTools() =>
+    [
+        new() 
+        {
+            FunctionDeclarations = 
+            [
+                new() 
                 {
-                    case "ListAllTables":
-                        {
-                            var tables = _databaseTools.ListAllTables();
-                            toolOutput = new JsonObject { ["tables"] = JsonSerializer.SerializeToNode(tables)! };
-                            break;
-                        }
-                    case "GetTableSchema":
-                        {
-                            var tableName = functionArgs?["tableName"]?.GetValue<string>();
-                            var tableSchema = _databaseTools.GetTableSchema(tableName!);
-                            toolOutput = new JsonObject { ["schema"] = JsonSerializer.SerializeToNode(tableSchema)! };
-                            break;
-                        }
-                    case "GetForeignKeys":
-                        {
-                            var tableName = functionArgs?["tableName"]?.GetValue<string>();
-                            var foreignKeys = _databaseTools.GetForeignKeys(tableName!);
-                            toolOutput = new JsonObject { ["foreignKeys"] = JsonSerializer.SerializeToNode(foreignKeys) };
-                            break;
-                        }
-                    default:
-                        throw new InvalidOperationException($"Unknown function call: {functionName}");
-                }
-
-                contents.Add(new JsonObject
+                    Name = "ListAllTables",
+                    Description = "Lists all tables in the database.",
+                    Parameters = new FunctionParameters { Properties = new() }
+                },
+                new() 
                 {
-                    ["role"] = "tool",
-                    ["parts"] = new JsonArray(new JsonObject
+                    Name = "GetTableSchema",
+                    Description = "Gets the schema for a given table.",
+                    Parameters = new FunctionParameters 
                     {
-                        ["functionResponse"] = new JsonObject
+                        Required = ["tableName"],
+                        Properties = new() 
                         {
-                            ["name"] = functionName,
-                            ["response"] = JsonNode.Parse(toolOutput.ToJsonString()) // Deep clone toolOutput
+                            ["tableName"] = new ParameterProperty { Type = "string", Description = "The name of the table." }
                         }
-                    })
-                });
-            }
-
-            // Send the updated history back to the LLM
-            var toolRequest = new HttpRequestMessage(HttpMethod.Post, $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={apiKey}")
-            {
-                Content = new StringContent(PrepareLLMRequest(tools, contents).ToJsonString(), System.Text.Encoding.UTF8, "application/json")
-            };
-
-            var toolResponse = await client.SendAsync(toolRequest);
-            toolResponse.EnsureSuccessStatusCode();
-            responseBody = await toolResponse.Content.ReadAsStringAsync();
-            responseNode = JsonNode.Parse(responseBody);
+                    }
+                },
+                new() 
+                {
+                    Name = "GetForeignKeys",
+                    Description = "Gets the foreign keys for a given table.",
+                    Parameters = new FunctionParameters 
+                    {
+                        Required = ["tableName"],
+                        Properties = new() 
+                        {
+                            ["tableName"] = new ParameterProperty { Type = "string", Description = "The name of the table." }
+                        }
+                    }
+                }
+            ]
         }
+    ];
 
-        return GetSqlFromResponse(responseNode);
-    }
-
-    private static JsonObject PrepareLLMRequest(JsonObject tools, List<JsonObject> contents)
+    private static string? GetSqlFromResponse(GeminiResponse? response)
     {
-        var toolOutputContentsArray = new JsonArray();
-        foreach (var item in contents)
-        {
-            toolOutputContentsArray.Add(JsonNode.Parse(item.ToJsonString()!)!); // Deep clone each item
-        }
-        var toolOutputContent = new JsonObject
-        {
-            ["contents"] = toolOutputContentsArray,
-            ["tools"] = new JsonArray(JsonNode.Parse(tools.ToJsonString())!)
-        };
-        return toolOutputContent;
-    }
-
-    private static string? GetSqlFromResponse(JsonNode? responseNode)
-    {
-        var fullText = responseNode?["candidates"]?[0]?["content"]?["parts"]?[0]?["text"]?.GetValue<string>();
+        var fullText = response?.Candidates?.FirstOrDefault()?.Content?.Parts?.FirstOrDefault()?.Text;
 
         if (string.IsNullOrEmpty(fullText))
         {
@@ -224,12 +206,11 @@ public partial class GeminiTranslator(string apiKey, IDatabaseTools databaseTool
         // Try to find SQL wrapped in ```sql
         var sqlBlockMatch = BlockSqlRegex().Match(fullText);
         if (sqlBlockMatch.Success)
-        {
+        { 
             return sqlBlockMatch.Groups[1].Value.Trim();
         }
 
         // If not found, try to find a standalone SQL query
-        // This regex looks for common SQL keywords at the beginning of a line, followed by any characters until a semicolon or end of string.
         var sqlQueryMatch = StandaloneSqlRegex().Match(fullText);
         if (sqlQueryMatch.Success)
         {
