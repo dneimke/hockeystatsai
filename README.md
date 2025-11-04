@@ -1,3 +1,55 @@
+# HockeyStatsAI
+
+A CLI that translates natural language questions into safe, read-only SQL for a SQL Server database and executes them with sensible defaults.
+
+## Prerequisites
+- .NET 9 SDK
+- SQL Server (LocalDB is fine) with the `hockeystats` DB
+- Google Gemini API key
+
+## Setup
+1. Restore packages:
+```bash
+dotnet restore
+```
+2. Set user-secrets in the project directory (`src/HockeyStatsAI`):
+```bash
+# from src/HockeyStatsAI
+dotnet user-secrets set GEMINI_API_KEY "<your-gemini-api-key>"
+# If you prefer storing connection string in user-secrets instead of appsettings.json
+dotnet user-secrets set "ConnectionStrings:HockeyStatsDb" "<your-connection-string>"
+```
+3. Build and run:
+```bash
+dotnet run --project src/HockeyStatsAI
+```
+
+## Safety
+- SELECT-only. Non-SELECT statements, multiple statements, temp tables, and `SELECT INTO` are blocked.
+- Default row limit: 100 (can be overridden with the `limit` command).
+- Execution timeout: 30s.
+
+## CLI Commands
+- `dryrun on|off`: Toggle execution. When on, only prints SQL.
+- `limit N`: Override default row limit for SELECTs.
+- `format table|csv|json`: Change output format.
+- `explain`: Explain the last SQL using the model.
+- `rerun`: Re-run the last SQL with current options.
+
+## Logging
+- Console logging is enabled. Sensitive values are not printed.
+
+## Tests
+Run unit tests:
+```bash
+dotnet test
+```
+Tests cover SQL safety rules and secret redaction.
+
+## Configuration
+- Update `appsettings.json` as needed. Prefer user-secrets or environment variables for secrets.
+- Suggested connection string option: `ApplicationIntent=ReadOnly` for read-scale replicas.
+
 # HockeyStats Natural Language Query Tool
 
 This project demonstrates a .NET console application that translates natural language questions into SQL queries using the Gemini API and executes them against a local SQL Server database.

@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
-namespace HockeyStatsAI.Models;
+namespace HockeyStatsAI.Models.Gemini;
 
 // Main request body sent to the Gemini API
 public class GeminiRequest
@@ -118,3 +118,4 @@ public class ParameterProperty
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Description { get; set; }
 }
+
