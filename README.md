@@ -170,4 +170,4 @@ Contributions are welcome! Please ensure all tests pass before submitting a pull
 
 ## License
 
-[Add your license information here]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
